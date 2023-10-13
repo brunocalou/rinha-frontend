@@ -8,7 +8,8 @@
     <title>Rinha de Front-end</title>
   </head>
   <body>
-    <!-- <main
+    <main
+      id="home-page"
       class="flex min-h-screen flex-col items-center justify-center gap-6 p-4 text-center"
     >
       <h1 class="text-5xl font-bold">JSON Tree Viewer</h1>
@@ -17,52 +18,27 @@
         Simple JSON Viewer that runs completely on-client. No data exchange
       </p>
 
+      <input
+        type="file"
+        id="load-json-input"
+        multiple
+        accept="application/json"
+        style="display: none"
+      />
       <button
+        id="load-json-button"
         class="rounded-[5px] border bg-gradient-to-b from-gray-100 to-gray-50 px-3 py-[6px] font-medium leading-normal"
       >
         Load JSON
       </button>
-    </main> -->
 
-    <main class="m-auto flex max-w-2xl flex-col gap-2 p-6">
-      <h1 class="mb-2 text-3xl">alltypes.json</h1>
+      <p id="load-json-error" class="text-invalid hidden">Invalid file. Please load a valid JSON file.</p>
+    </main>
 
-      <div id="json" class="font-normal"></div>
-      
-      <div class="mt-8">
-        <div>
-          <span class="text-accent">Actors: </span>
-          <span class="font-bold text-brackets">[</span>
-        </div>
+    <main id="json-page" class="m-auto hidden max-w-2xl flex-col gap-2 p-6">
+      <h1 id="json-name" class="mb-2 text-3xl">alltypes.json</h1>
 
-        <div class="relative pl-4 text-gray-200">
-          <span>0:</span>
-          <!-- Line -->
-          <span
-            class="absolute left-0 h-full w-[1px] origin-top-left scale-y-[400%] border-l-[1px] border-gray-200"
-          ></span>
-        </div>
-
-        <div class="relative ml-8">
-          <span class="text-accent">name: </span><span>"Tom Cruise"</span>
-          <!-- Line -->
-          <span
-            class="absolute -left-4 h-full w-[1px] origin-top-left scale-y-[300%] border-l-[1px] border-gray-200"
-          ></span>
-        </div>
-
-        <div class="ml-8">
-          <span class="text-accent">age: </span><span>56</span>
-        </div>
-
-        <div class="ml-8">
-          <span class="text-accent">Born At: </span><span>"Syracuse, NY"</span>
-        </div>
-
-        <div>
-          <span class="font-bold text-brackets">]</span>
-        </div>
-      </div>
+      <div id="json"></div>
     </main>
 
     <script type="module" src="/src/main.ts"></script>

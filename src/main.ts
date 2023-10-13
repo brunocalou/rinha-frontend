@@ -162,7 +162,7 @@ type LineParent = "object" | "array";
 function toLines(
   json: Record<string, any>,
   depth = 0,
-  parent: LineParent = "object",
+  parent: LineParent,
 ): HTMLElement[] {
   const lines: HTMLElement[] = [];
 
@@ -185,8 +185,73 @@ function toLines(
   return lines;
 }
 
-const root = document.getElementById("json")!;
+// Home
+const homePage = document.getElementById("home-page")!;
+const loadJsonButton = document.getElementById("load-json-button")!;
+const loadJsonInput = document.getElementById("load-json-input")!;
+const jsonErrorElement = document.getElementById("load-json-error")!;
 
-root.append(...toLines(json));
+// Json
+const jsonPage = document.getElementById("json-page")!;
+const jsonNameElement = document.getElementById("json-name")!;
+const jsonElement = document.getElementById("json")!;
+
+async function parseJsonFile(file: File) {
+  return new Promise<Record<string, any>>((resolve, reject) => {
+    const fileReader = new FileReader();
+    fileReader.onload = (event) => {
+      try {
+        console.time("parse json file");
+        resolve(JSON.parse(event.target!.result as any));
+      } catch (error) {
+        console.error(error);
+        reject(error);
+      } finally {
+        console.timeEnd("parse json file");
+      }
+    };
+    fileReader.onerror = (error) => reject(error);
+    fileReader.readAsText(file);
+  });
+}
+
+function init() {
+  loadJsonInput.addEventListener("change", async (event: Event) => {
+    const file = (event.target as HTMLInputElement).files?.[0];
+
+    if (file) {
+      try {
+        const json = await parseJsonFile(file);
+
+        jsonNameElement.innerText = file.name;
+        jsonPage.parentElement!.removeChild(homePage);
+        jsonPage.classList.remove("hidden");
+        jsonPage.classList.add("flex");
+        console.time("convert lines");
+        const lines = toLines(
+          json,
+          0,
+          Array.isArray(json) ? "array" : "object",
+        );
+        console.timeEnd("convert lines");
+
+        console.time("append json");
+        for (let line of lines) {
+          jsonElement.appendChild(line);
+        }
+        console.timeEnd("append json");
+      } catch (error) {
+        console.error(error);
+        jsonErrorElement.classList.remove("hidden");
+      }
+    }
+  });
+
+  loadJsonButton.addEventListener("click", () => {
+    loadJsonInput.click();
+  });
+}
+
+init();
 
 // TODO: left lines
