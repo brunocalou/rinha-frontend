@@ -102,18 +102,18 @@ function getObjectLine(
   span1.appendChild(document.createTextNode(`${index}:`));
   div.appendChild(span1);
 
-  //   const line = document.createElement("span");
-  //   line.classList.add(
-  //     "absolute",
-  //     "left-0",
-  //     "h-full",
-  //     "w-[1px]",
-  //     "origin-top-left",
-  //     "border-l-[1px]",
-  //     "border-gray-200",
-  //   );
-  //   line.style.transform = `scaleY(${objectSize * 100 + 100}%)`;
-  //   div.appendChild(line);
+//   const line = document.createElement("span");
+//   line.classList.add(
+//     "absolute",
+//     "left-0",
+//     "h-full",
+//     "w-[1px]",
+//     "origin-top-left",
+//     "border-l-[1px]",
+//     "border-gray-200",
+//   );
+//   line.style.transform = `scaleY(${objectSize * 100 + 100}%)`;
+//   div.appendChild(line);
 
   return div;
 }
@@ -153,48 +153,91 @@ function getPropertyLine(
   return div;
 }
 
-function getAmountOfLines(json: Record<string, any>) {
-  return 0;
-}
-
 type LineParent = "object" | "array";
 
-function toLines(
-  json: Record<string, any>,
-  depth = 0,
-  parent: LineParent,
-): HTMLElement[] {
-  const lines: HTMLElement[] = [];
+class JsonRenderer {
+  private json: Record<string, any>;
+  private root: HTMLElement;
+  private amountOfLines = 0;
 
-  for (let [key, value] of Object.entries(json)) {
-    const isArray = Array.isArray(value);
-    const isObject = value instanceof Object;
+  constructor(json: Record<string, any>, root: HTMLElement) {
+    this.json = json;
+    this.root = root;
+    this.amountOfLines = JsonRenderer.countLines(json);
+    // It doesn't account for line breaks
+    root.style.minHeight = `${
+      +getComputedStyle(root).lineHeight.replace("px", "") * this.amountOfLines
+    }px`;
+    this.appendLines(
+      JsonRenderer.toLines(json, 0, Array.isArray(json) ? "array" : "object"),
+    );
+  }
 
-    if (isArray) {
-      lines.push(getArrayLine(key, depth));
-      lines.push(...toLines(value, depth + 1, "array"));
-      lines.push(getCloseArrayLine(depth));
-    } else if (isObject) {
-      lines.push(getObjectLine(key, getAmountOfLines(value), depth, parent));
-      lines.push(...toLines(value, depth + 1, "object"));
-    } else {
-      lines.push(getPropertyLine(key, value, depth, parent));
+  private appendLines(lines: HTMLElement[]) {
+    for (let line of lines) {
+      this.root.appendChild(line);
     }
   }
 
-  return lines;
+  private static countLines(json: Record<string, any>): number {
+    let counter = 0;
+
+    for (let value of Object.values(json)) {
+      const isArray = Array.isArray(value);
+      const isObject = value instanceof Object;
+
+      if (isArray) {
+        counter += 2 + JsonRenderer.countLines(value);
+      } else if (isObject) {
+        counter += 1 + JsonRenderer.countLines(value);
+      } else {
+        counter += 1;
+      }
+    }
+
+    return counter;
+  }
+
+  private static toLines(
+    json: Record<string, any>,
+    depth = 0,
+    parent: LineParent,
+  ): HTMLElement[] {
+    const lines: HTMLElement[] = [];
+
+    for (let [key, value] of Object.entries(json)) {
+      const isArray = Array.isArray(value);
+      const isObject = value instanceof Object;
+
+      if (isArray) {
+        lines.push(getArrayLine(key, depth));
+        lines.push(...JsonRenderer.toLines(value, depth + 1, "array"));
+        lines.push(getCloseArrayLine(depth));
+      } else if (isObject) {
+        lines.push(
+          getObjectLine(key, JsonRenderer.countLines(value), depth, parent),
+        );
+        lines.push(...JsonRenderer.toLines(value, depth + 1, "object"));
+      } else {
+        lines.push(getPropertyLine(key, value, depth, parent));
+      }
+    }
+
+    return lines;
+  }
 }
 
 // Home
 const homePage = document.getElementById("home-page")!;
 const loadJsonButton = document.getElementById("load-json-button")!;
 const loadJsonInput = document.getElementById("load-json-input")!;
-const jsonErrorElement = document.getElementById("load-json-error")!;
+const jsonErrorText = document.getElementById("load-json-error")!;
 
 // Json
 const jsonPage = document.getElementById("json-page")!;
-const jsonNameElement = document.getElementById("json-name")!;
-const jsonElement = document.getElementById("json")!;
+const jsonNameText = document.getElementById("json-name")!;
+const jsonTarget = document.getElementById("json")!;
+let jsonRenderer: JsonRenderer | null = null;
 
 async function parseJsonFile(file: File) {
   return new Promise<Record<string, any>>((resolve, reject) => {
@@ -223,26 +266,28 @@ function init() {
       try {
         const json = await parseJsonFile(file);
 
-        jsonNameElement.innerText = file.name;
+        jsonNameText.innerText = file.name;
         jsonPage.parentElement!.removeChild(homePage);
         jsonPage.classList.remove("hidden");
         jsonPage.classList.add("flex");
-        console.time("convert lines");
-        const lines = toLines(
-          json,
-          0,
-          Array.isArray(json) ? "array" : "object",
-        );
-        console.timeEnd("convert lines");
 
-        console.time("append json");
-        for (let line of lines) {
-          jsonElement.appendChild(line);
-        }
-        console.timeEnd("append json");
+        jsonRenderer = new JsonRenderer(json, jsonTarget);
+        // console.time("convert lines");
+        // const lines = toLines(
+        //   json,
+        //   0,
+        //   Array.isArray(json) ? "array" : "object",
+        // );
+        // console.timeEnd("convert lines");
+
+        // console.time("append json");
+        // for (let line of lines) {
+        //   jsonTarget.appendChild(line);
+        // }
+        // console.timeEnd("append json");
       } catch (error) {
         console.error(error);
-        jsonErrorElement.classList.remove("hidden");
+        jsonErrorText.classList.remove("hidden");
       }
     }
   });
