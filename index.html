@@ -1,15 +1,29 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/src/style.css" />
     <title>Rinha de Front-end</title>
   </head>
   <body>
-    <div id="app"></div>
-    <h1 class="text-lg text-red-500">JSON Tree Viewer</h1>
+    <main
+      class="flex min-h-screen flex-col items-center justify-center gap-6 p-4 text-center"
+    >
+      <h1 class="text-5xl font-bold">JSON Tree Viewer</h1>
+
+      <p class="text-2xl">
+        Simple JSON Viewer that runs completely on-client. No data exchange
+      </p>
+
+      <button
+        class="rounded-[5px] border bg-gradient-to-b from-gray-100 to-gray-50 px-3 py-[6px] font-medium leading-normal"
+      >
+        Load JSON
+      </button>
+    </main>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
