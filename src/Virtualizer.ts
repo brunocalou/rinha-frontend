@@ -1,6 +1,6 @@
 export class Virtualizer {
   private visibleRange = [0, 0];
-  private mountedIndexes: boolean[];
+  private mountedIndexes: boolean[] = [];
   private extraRangeInPx = 100;
 
   constructor(
@@ -10,11 +10,16 @@ export class Virtualizer {
     private onMount: (index: number) => boolean,
     private onUnmount: (index: number) => boolean,
   ) {
-    root.style.position = "relative";
-    root.style.minHeight = `${itemHeight * listSize}px`;
-    this.mountedIndexes = new Array(listSize).fill(null);
-    this.visibleRange = this.calcVisibleRange();
+    this.updateListSize(listSize);
     this.addListeners();
+  }
+
+  updateListSize(newListSize: number) {
+    this.listSize = newListSize;
+    this.root.style.position = "relative";
+    this.root.style.minHeight = `${this.itemHeight * this.listSize}px`;
+    this.mountedIndexes = new Array(this.listSize).fill(null);
+    this.visibleRange = this.calcVisibleRange();
   }
 
   mountVisibleItems() {

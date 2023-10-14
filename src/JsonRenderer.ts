@@ -10,14 +10,108 @@ type Line = {
   type: "array-start" | "array-end" | "object-start" | "property";
 };
 
+class Page {
+  element: HTMLElement;
+  virtualizer: Virtualizer;
+
+  constructor(
+    private itemHeight: number,
+    private lines: number,
+    private onMount: (page: Page, index: number) => boolean,
+    private onUnmount: (page: Page, index: number) => boolean,
+  ) {
+    this.element = document.createElement("div");
+    this.element.classList.add("relative");
+    this.virtualizer = new Virtualizer(
+      this.element,
+      this.itemHeight,
+      this.lines,
+      (index) => {
+        return this.onMount(this, index);
+      },
+      (index) => {
+        return this.onUnmount(this, index);
+      },
+    );
+  }
+
+  updateLines(newLines: number) {
+    this.lines = newLines;
+    this.virtualizer.updateListSize(newLines);
+  }
+}
+
+class Pagination {
+  private pages: Page[] = [];
+
+  constructor(
+    private root: HTMLElement,
+    private itemHeight: number,
+    private linesPerPage: number,
+    private onMount: (
+      page: Page,
+      globalIndex: number,
+      localIndex: number,
+    ) => boolean,
+    private onUnmount: (
+      page: Page,
+      globalIndex: number,
+      localIndex: number,
+    ) => boolean,
+  ) {}
+
+  createPagesToFitLines(amountOfLines: number) {
+    const amountOfPages = Math.floor(amountOfLines / this.linesPerPage) + 1;
+
+    if (this.pages.length < amountOfPages) {
+      for (let i = this.pages.length; i < amountOfPages; i += 1) {
+        const page = new Page(
+          this.itemHeight,
+          this.linesPerPage,
+          (pageInstance, pageLineIndex) => {
+            return this.onMount(
+              pageInstance,
+              pageLineIndex + i * this.linesPerPage,
+              pageLineIndex,
+            );
+          },
+          (pageInstance, pageLineIndex) => {
+            return this.onUnmount(
+              pageInstance,
+              pageLineIndex + i * this.linesPerPage,
+              pageLineIndex,
+            );
+          },
+        );
+        this.pages.push(page);
+        /**
+         * TODO: 
+         * - Use just 2 pages at any time (double buffer swap technique)
+         * - Swap their positions on root according to the scroll
+         * - Disable virtualizer when the page is out of view
+         **/
+        this.root.appendChild(page.element);
+        page.virtualizer.mountVisibleItems();
+      }
+    }
+  }
+
+  adjustLastPageToFitLines(amountOfLines: number) {
+    const lastPage = this.pages[this.pages.length - 1];
+    const currentTotalAmountOfLines = this.pages.length * this.linesPerPage;
+    const extraLines = currentTotalAmountOfLines - amountOfLines;
+    const expectedLastPageSize = this.linesPerPage - extraLines;
+    lastPage.updateLines(expectedLastPageSize);
+  }
+}
+
 export class JsonRenderer {
   static tabSize = 16;
   private json: Record<string, any>;
   private root: HTMLElement;
-  private virtualizer: Virtualizer;
-  private lines: Line[];
+  private lines: Line[] = [];
   private lineCount = 0;
-  private renderedLines: Array<HTMLElement | null>;
+  private renderedLines: Array<HTMLElement | null> = [];
   private lineHeight = 0;
   private lineGenerator: Generator<Line>;
   private linesOnInitialLoad = 50;
@@ -25,24 +119,18 @@ export class JsonRenderer {
   private loadLinesTimeoutId = -1;
   private loadedLinesCount = 0;
   private loadLinesInterval = 0;
+  private pagination: Pagination;
+  private linesPerPage = 1e4;
 
   constructor(json: Record<string, any>, root: HTMLElement) {
     this.json = json;
     this.root = root;
     this.lineHeight = +getComputedStyle(root).lineHeight.replace("px", "");
 
-    console.time("count lines");
-    this.lineCount = JsonRenderer.countLines(json);
-    this.renderedLines = new Array(this.lineCount).fill(null);
-    this.lines = new Array(this.lineCount).fill(null);
-    console.timeEnd("count lines");
-
-    // TODO: Paginate elements
-
-    this.virtualizer = new Virtualizer(
-      root,
+    this.pagination = new Pagination(
+      this.root,
       this.lineHeight,
-      this.lineCount,
+      this.linesPerPage,
       this.mount.bind(this),
       this.unmount.bind(this),
     );
@@ -52,16 +140,20 @@ export class JsonRenderer {
       0,
       Array.isArray(json) ? "array" : "object",
     );
+
+    console.time("load all lines");
     this.loadLines(this.linesOnInitialLoad);
   }
 
   private loadLines(amount: number) {
     const isDone = this.loadNextLines(amount);
-    this.virtualizer.mountVisibleItems();
+    this.pagination.createPagesToFitLines(this.lines.length);
 
     if (isDone) {
       console.log("Finished loading lines");
       console.log(this.lineCount, this.lines.length);
+      console.timeEnd("load all lines");
+      this.pagination.adjustLastPageToFitLines(this.lines.length);
       return;
     }
 
@@ -71,69 +163,52 @@ export class JsonRenderer {
   }
 
   private loadNextLines(amount: number) {
-    console.time("load next lines");
+    // console.time("load next lines");
 
     let next: IteratorResult<Line, any> | null = null;
     let counter = 0;
-    const linesIndexStart = this.loadedLinesCount;
 
     do {
       next = this.lineGenerator.next();
 
       if (!next.done) {
-        this.lines[linesIndexStart + counter] = next.value;
+        this.lines.push(next.value);
 
         this.loadedLinesCount += 1;
         counter += 1;
       }
     } while (counter <= amount && !next.done);
 
-    console.timeEnd("load next lines");
+    // console.timeEnd("load next lines");
     return next.done;
   }
 
-  private static countLines(json: Record<string, any>): number {
-    let counter = 0;
-
-    for (let value of Object.values(json)) {
-      const isArray = Array.isArray(value);
-      const isObject = value instanceof Object;
-
-      if (isArray) {
-        counter += 2 + JsonRenderer.countLines(value);
-      } else if (isObject) {
-        counter += 1 + JsonRenderer.countLines(value);
-      } else {
-        counter += 1;
-      }
-    }
-
-    return counter;
-  }
-
-  private mount(index: number) {
-    const line = this.lines[index];
-    let element = this.renderedLines[index];
+  private mount(
+    pageInstance: Page,
+    globalIndex: number,
+    localIndex: number,
+  ): boolean {
+    const line = this.lines[globalIndex];
+    let element = this.renderedLines[globalIndex];
 
     if (!line) {
-      console.log(`line ${index} not ready`);
       return false;
     }
 
     if (!element) {
-      element = JsonRenderer.renderLine(line, index * this.lineHeight);
-      this.renderedLines[index] = element;
+      element = JsonRenderer.renderLine(line, localIndex * this.lineHeight);
+      this.renderedLines[globalIndex] = element;
     }
 
-    this.root.appendChild(element);
+    pageInstance.element.appendChild(element);
     return true;
   }
 
-  private unmount(index: number) {
-    const element = this.renderedLines[index];
+  private unmount(pageInstance: Page, globalIndex: number): boolean {
+    const element = this.renderedLines[globalIndex];
 
-    if (element && element.parentElement === this.root) {
-      this.root.removeChild(element);
+    if (element && element.parentElement === pageInstance.element) {
+      pageInstance.element.removeChild(element);
     }
 
     return true;
