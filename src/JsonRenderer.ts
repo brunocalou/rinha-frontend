@@ -24,8 +24,6 @@ export class JsonRenderer {
     this.root = root;
     this.lineHeight = +getComputedStyle(root).lineHeight.replace("px", "");
 
-    // TODO: Improve this time
-    // TODO: Render vertical lines separate and keep them always on the page
     console.time("to lines");
     this.lines = JsonRenderer.toLines(
       json,
@@ -88,11 +86,21 @@ export class JsonRenderer {
 
       if (isArray) {
         lines.push({ type: "array-start", key, depth });
-        lines.push(...JsonRenderer.toLines(value, depth + 1, "array"));
+        const newLines = JsonRenderer.toLines(value, depth + 1, "array");
+
+        for (let i = 0; i < newLines.length; i += 1) {
+          lines.push(newLines[i]);
+        }
+
         lines.push({ type: "array-end", depth });
       } else if (isObject) {
         lines.push({ type: "object-start", key, depth, lineParent });
-        lines.push(...JsonRenderer.toLines(value, depth + 1, "object"));
+
+        const newLines = JsonRenderer.toLines(value, depth + 1, "object");
+
+        for (let i = 0; i < newLines.length; i += 1) {
+          lines.push(newLines[i]);
+        }
       } else {
         lines.push({ type: "property", key, value, depth, lineParent });
       }
