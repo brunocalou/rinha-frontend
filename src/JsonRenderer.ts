@@ -1,27 +1,61 @@
+import { Virtualizer } from "./Virtualizer";
+
 export type LineParent = "object" | "array";
 
 export class JsonRenderer {
   private json: Record<string, any>;
   private root: HTMLElement;
-  private amountOfLines = 0;
+  private virtualizer: Virtualizer;
+  private lines: HTMLElement[];
 
   constructor(json: Record<string, any>, root: HTMLElement) {
     this.json = json;
     this.root = root;
-    this.amountOfLines = JsonRenderer.countLines(json);
-    // It doesn't account for line breaks
-    root.style.minHeight = `${
-      +getComputedStyle(root).lineHeight.replace("px", "") * this.amountOfLines
-    }px`;
-    this.appendLines(
-      JsonRenderer.toLines(json, 0, Array.isArray(json) ? "array" : "object"),
+    const lineHeight = +getComputedStyle(root).lineHeight.replace("px", "");
+
+    // TODO: Improve this time
+    // TODO: Render vertical lines separate and keep them always on the page
+    console.time("to lines");
+    this.lines = JsonRenderer.toLines(
+      json,
+      0,
+      Array.isArray(json) ? "array" : "object",
+    ).map((line, index) => this.wrapElement(line, index * lineHeight));
+    console.timeEnd("to lines");
+
+    this.virtualizer = new Virtualizer(
+      root,
+      lineHeight,
+      this.lines.length,
+      this.mount.bind(this),
+      this.unmount.bind(this),
     );
   }
 
-  private appendLines(lines: HTMLElement[]) {
-    for (let line of lines) {
-      this.root.appendChild(line);
+  private mount(index: number) {
+    const element = this.lines[index];
+
+    if (element) {
+      this.root.appendChild(element);
     }
+  }
+
+  private unmount(index: number) {
+    const element = this.lines[index];
+
+    if (element) {
+      this.root.removeChild(element);
+    }
+  }
+
+  private wrapElement(element: HTMLElement, top: number) {
+    const wrapper = document.createElement("div");
+    wrapper.classList.add("absolute");
+    wrapper.style.top = `${top}px`;
+
+    wrapper.appendChild(element);
+
+    return wrapper;
   }
 
   private static countLines(json: Record<string, any>): number {
