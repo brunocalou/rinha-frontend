@@ -7,22 +7,23 @@ export class Virtualizer {
     private root: HTMLElement,
     private itemHeight: number,
     private listSize: number,
-    private onMount: (index: number) => void,
-    private onUnmount: (index: number) => void,
+    private onMount: (index: number) => boolean,
+    private onUnmount: (index: number) => boolean,
   ) {
     root.style.position = "relative";
     root.style.minHeight = `${itemHeight * listSize}px`;
     this.mountedIndexes = new Array(listSize).fill(null);
+    this.visibleRange = this.calcVisibleRange();
     this.addListeners();
-    this.mountInitial();
   }
 
-  private mountInitial() {
-    this.visibleRange = this.calcVisibleRange();
-
+  mountVisibleItems() {
     for (let i = this.visibleRange[0]; i < this.visibleRange[1]; i += 1) {
-      this.mountedIndexes[i] = true;
-      this.onMount(i);
+      if (!this.mountedIndexes[i]) {
+        if (this.onMount(i)) {
+          this.mountedIndexes[i] = true;
+        }
+      }
     }
   }
 
@@ -59,16 +60,18 @@ export class Virtualizer {
 
       if (this.mountedIndexes[i] !== null) {
         // console.log("unmount", i, this.mountedIndexes[i]);
-        this.mountedIndexes[i] = false;
-        this.onUnmount(i);
+        if (this.onUnmount(i)) {
+          this.mountedIndexes[i] = false;
+        }
       }
     }
 
     for (let i = newVisibleRange[0]; i < newVisibleRange[1]; i += 1) {
       if (!this.mountedIndexes[i]) {
         // console.log("mount", i, this.mountedIndexes[i]);
-        this.mountedIndexes[i] = true;
-        this.onMount(i);
+        if (this.onMount(i)) {
+          this.mountedIndexes[i] = true;
+        }
       }
     }
     this.visibleRange = newVisibleRange;
