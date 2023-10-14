@@ -1,27 +1,6 @@
 import { JsonRenderer } from "./JsonRenderer";
 import { parseJsonFile } from "./parseJsonFile";
 
-const json = {
-  Actors: [
-    {
-      name: "Tom Cruise",
-      age: 56,
-      "Born At": "Syracuse, NY",
-    },
-    {
-      name: "Tom Cruise",
-      age: 56,
-      "Born At": "Syracuse, NY",
-      details: {
-        name: "Tom Cruise",
-        age: 56,
-        "Born At": "Syracuse, NY",
-        children: ["value 1", "value 2", { a: 123 }],
-      },
-    },
-  ],
-};
-
 // Home
 const homePage = document.getElementById("home-page")!;
 const loadJsonButton = document.getElementById("load-json-button")!;
@@ -61,5 +40,3 @@ function init() {
 }
 
 init();
-
-// TODO: left lines

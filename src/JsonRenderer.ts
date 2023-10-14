@@ -172,18 +172,6 @@ export class JsonRenderer {
     div.appendChild(span1);
     div.appendChild(document.createTextNode(formattedValue));
 
-    //   const line = document.createElement("span");
-    //   line.classList.add(
-    //     "absolute",
-    //     "h-full",
-    //     "w-[1px]",
-    //     "origin-top-left",
-    //     "border-l-[1px]",
-    //     "border-gray-200",
-    //   );
-    //   line.style.left = "-16px";
-    //   div.appendChild(line);
-
     return div;
   }
 }
