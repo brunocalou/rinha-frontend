@@ -6,7 +6,7 @@ export class Virtualizer {
   constructor(
     private root: HTMLElement,
     private itemHeight: number,
-    listSize: number,
+    private listSize: number,
     private onMount: (index: number) => void,
     private onUnmount: (index: number) => void,
   ) {
@@ -28,20 +28,31 @@ export class Virtualizer {
 
   private calcVisibleRange() {
     const rect = this.root.getBoundingClientRect();
-    const start = Math.min(rect.height, Math.max(0, -rect.top - this.extraRangeInPx));
-    const end = Math.min(rect.height, Math.max(0, start + window.innerHeight + this.extraRangeInPx));
+    const start = Math.min(
+      rect.height,
+      Math.max(0, -rect.top - this.extraRangeInPx),
+    );
+    const end = Math.max(
+      0,
+      -rect.top + window.innerHeight + this.extraRangeInPx,
+    );
 
-    const indexStart = Math.floor(start / this.itemHeight);
-    const indexEnd = Math.floor(end / this.itemHeight);
+    const indexStart = Math.min(
+      this.listSize,
+      Math.floor(start / this.itemHeight),
+    );
+    const indexEnd = Math.min(
+      this.listSize,
+      Math.max(0, Math.floor(end / this.itemHeight) - 1),
+    );
 
     return [indexStart, indexEnd];
   }
 
   private handleScroll() {
     const newVisibleRange = this.calcVisibleRange();
-    // console.log(this.mountedIndexes);
 
-    for (let i = this.visibleRange[0]; i <= this.visibleRange[1]; i += 1) {
+    for (let i = this.visibleRange[0]; i < this.visibleRange[1]; i += 1) {
       if (i >= newVisibleRange[0] && i <= newVisibleRange[1]) {
         continue;
       }
@@ -53,7 +64,7 @@ export class Virtualizer {
       }
     }
 
-    for (let i = newVisibleRange[0]; i <= newVisibleRange[1]; i += 1) {
+    for (let i = newVisibleRange[0]; i < newVisibleRange[1]; i += 1) {
       if (!this.mountedIndexes[i]) {
         // console.log("mount", i, this.mountedIndexes[i]);
         this.mountedIndexes[i] = true;

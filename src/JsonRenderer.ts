@@ -2,17 +2,27 @@ import { Virtualizer } from "./Virtualizer";
 
 export type LineParent = "object" | "array";
 
+type Line = {
+  key?: string;
+  value?: any;
+  lineParent?: LineParent;
+  depth: number;
+  type: "array-start" | "array-end" | "object-start" | "property";
+};
+
 export class JsonRenderer {
   static tabSize = 16;
   private json: Record<string, any>;
   private root: HTMLElement;
   private virtualizer: Virtualizer;
-  private lines: HTMLElement[];
+  private lines: Line[];
+  private renderedLines: Array<HTMLElement | null>;
+  private lineHeight = 0;
 
   constructor(json: Record<string, any>, root: HTMLElement) {
     this.json = json;
     this.root = root;
-    const lineHeight = +getComputedStyle(root).lineHeight.replace("px", "");
+    this.lineHeight = +getComputedStyle(root).lineHeight.replace("px", "");
 
     // TODO: Improve this time
     // TODO: Render vertical lines separate and keep them always on the page
@@ -21,12 +31,14 @@ export class JsonRenderer {
       json,
       0,
       Array.isArray(json) ? "array" : "object",
-    ).map((line, index) => this.wrapElement(line, index * lineHeight));
+    );
     console.timeEnd("to lines");
+
+    this.renderedLines = new Array(this.lines.length).fill(null);
 
     this.virtualizer = new Virtualizer(
       root,
-      lineHeight,
+      this.lineHeight,
       this.lines.length,
       this.mount.bind(this),
       this.unmount.bind(this),
@@ -34,22 +46,26 @@ export class JsonRenderer {
   }
 
   private mount(index: number) {
-    const element = this.lines[index];
+    const line = this.lines[index];
+    let element = this.renderedLines[index];
 
-    if (element) {
-      this.root.appendChild(element);
+    if (!element) {
+      element = JsonRenderer.renderLine(line, index * this.lineHeight);
+      this.renderedLines[index] = element;
     }
+
+    this.root.appendChild(element);
   }
 
   private unmount(index: number) {
-    const element = this.lines[index];
+    const element = this.renderedLines[index];
 
-    if (element) {
+    if (element && element.parentElement === this.root) {
       this.root.removeChild(element);
     }
   }
 
-  private wrapElement(element: HTMLElement, top: number) {
+  private static wrapElement(element: HTMLElement, top: number) {
     const wrapper = document.createElement("div");
     wrapper.classList.add("absolute");
     wrapper.style.top = `${top}px`;
@@ -59,49 +75,55 @@ export class JsonRenderer {
     return wrapper;
   }
 
-  //   private static countLines(json: Record<string, any>): number {
-  //     let counter = 0;
-
-  //     for (let value of Object.values(json)) {
-  //       const isArray = Array.isArray(value);
-  //       const isObject = value instanceof Object;
-
-  //       if (isArray) {
-  //         counter += 2 + JsonRenderer.countLines(value);
-  //       } else if (isObject) {
-  //         counter += 1 + JsonRenderer.countLines(value);
-  //       } else {
-  //         counter += 1;
-  //       }
-  //     }
-
-  //     return counter;
-  //   }
-
   private static toLines(
     json: Record<string, any>,
     depth = 0,
-    parent: LineParent,
-  ): HTMLElement[] {
-    const lines: HTMLElement[] = [];
+    lineParent: LineParent,
+  ): Line[] {
+    const lines: Line[] = [];
 
     for (let [key, value] of Object.entries(json)) {
       const isArray = Array.isArray(value);
       const isObject = value instanceof Object;
 
       if (isArray) {
-        lines.push(JsonRenderer.getArrayLine(key, depth));
+        lines.push({ type: "array-start", key, depth });
         lines.push(...JsonRenderer.toLines(value, depth + 1, "array"));
-        lines.push(JsonRenderer.getCloseArrayLine(depth));
+        lines.push({ type: "array-end", depth });
       } else if (isObject) {
-        lines.push(JsonRenderer.getObjectLine(key, depth, parent));
+        lines.push({ type: "object-start", key, depth, lineParent });
         lines.push(...JsonRenderer.toLines(value, depth + 1, "object"));
       } else {
-        lines.push(JsonRenderer.getPropertyLine(key, value, depth, parent));
+        lines.push({ type: "property", key, value, depth, lineParent });
       }
     }
 
     return lines;
+  }
+
+  private static renderLine(line: Line, top: number): HTMLElement {
+    let element: HTMLElement | null = null;
+
+    if (line.type === "array-start") {
+      element = JsonRenderer.getArrayLine(line.key!, line.depth);
+    } else if (line.type === "array-end") {
+      element = JsonRenderer.getCloseArrayLine(line.depth);
+    } else if (line.type === "object-start") {
+      element = JsonRenderer.getObjectLine(
+        line.key!,
+        line.depth,
+        line.lineParent!,
+      );
+    } else {
+      element = JsonRenderer.getPropertyLine(
+        line.key!,
+        line.value,
+        line.depth,
+        line.lineParent!,
+      );
+    }
+
+    return JsonRenderer.wrapElement(element, top);
   }
 
   private static getArrayLine(value: string, depth: number): HTMLElement {
