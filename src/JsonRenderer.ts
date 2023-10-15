@@ -17,12 +17,18 @@ class PageSwapObserver {
   constructor(
     private root: HTMLElement,
     public role: "observe-start" | "observe-end",
+    rootMargin: string,
     private onIntersect: (isIntersecting: boolean) => void,
   ) {
     this.element = document.createElement("div");
-    this.observer = new IntersectionObserver((entries) => {
-      this.onIntersect(entries[0].isIntersecting);
-    });
+    this.observer = new IntersectionObserver(
+      (entries) => {
+        this.onIntersect(entries[0].isIntersecting);
+      },
+      {
+        rootMargin,
+      },
+    );
 
     this.observer.observe(this.element);
   }
@@ -50,7 +56,7 @@ class PageSwapObserver {
 
 class Page {
   element: HTMLElement;
-  // virtualizer: Virtualizer;
+  private virtualizer: Virtualizer;
 
   constructor(
     private root: HTMLElement,
@@ -69,49 +75,42 @@ class Page {
     ) => boolean,
   ) {
     this.element = document.createElement("div");
-    this.element.style.position = "relative";
-    this.element.style.minHeight = `${this.lineHeight * this.lines}px`;
-    // this.virtualizer = new Virtualizer(
-    //   this.element,
-    //   this.lineHeight,
-    //   this.lines,
-    //   (index) => {
-    //     return this.onMount(this, this.pageIndexOffset + index, index);
-    //   },
-    //   (index) => {
-    //     return this.onUnmount(this, this.pageIndexOffset + index, index);
-    //   },
-    // );
+    this.virtualizer = new Virtualizer(
+      this.element,
+      this.lineHeight,
+      this.lines,
+      (index) => {
+        return this.onMount(this, this.pageIndexOffset + index, index);
+      },
+      (index) => {
+        return this.onUnmount(this, this.pageIndexOffset + index, index);
+      },
+    );
   }
 
-  mountChildren() {
-    console.log("mount children", this.pageIndexOffset, this.lines);
-    for (let i = 0; i < this.lines; i += 1) {
-      this.onMount(this, this.pageIndexOffset + i, i);
-    }
+  mountVisibleItems() {
+    this.virtualizer.mountVisibleItems();
   }
 
   updateLines(newLines: number) {
-    console.log("adjust lines to", newLines);
-    this.lines = newLines;
-    this.element.style.minHeight = `${this.lineHeight * this.lines}px`;
-    // this.virtualizer.updateListSize(newLines);
+    if (this.lines !== newLines) {
+      this.lines = newLines;
+      this.virtualizer.updateListSize(newLines);
+    }
   }
 
   mountOnStart() {
     this.element.textContent = "";
-    this.mountChildren();
     this.root.prepend(this.element);
-    // this.virtualizer.reset();
-    // this.virtualizer.mountVisibleItems();
+    this.virtualizer.reset();
+    this.virtualizer.mountVisibleItems();
   }
 
   mountOnEnd() {
     this.element.textContent = "";
-    this.mountChildren();
     this.root.appendChild(this.element);
-    // this.virtualizer.reset();
-    // this.virtualizer.mountVisibleItems();
+    this.virtualizer.reset();
+    this.virtualizer.mountVisibleItems();
   }
 }
 
@@ -119,8 +118,7 @@ class DoubleSwapPagination {
   private pages: Page[] = [];
   private pageObserverStart: PageSwapObserver;
   private pageObserverEnd: PageSwapObserver;
-  private totalAmountOfLines = 0;
-  // private activePage: Page;
+  private totalAmountOfLines = Infinity;
 
   constructor(
     private root: HTMLElement,
@@ -137,8 +135,6 @@ class DoubleSwapPagination {
       localIndex: number,
     ) => boolean,
   ) {
-    this.totalAmountOfLines = linesPerPage * 2;
-
     for (let i = 0; i < 2; i += 1) {
       const page = new Page(
         this.root,
@@ -149,23 +145,20 @@ class DoubleSwapPagination {
         this.onUnmount,
       );
       this.pages.push(page);
-      /**
-       * TODO:
-       * - Use just 2 pages at any time (double buffer swap technique)
-       * - Swap their positions on root according to the scroll
-       * - Disable virtualizer when the page is out of view
-       **/
       page.mountOnEnd();
     }
+
+    const rootMarginBase =
+      Math.min(100, 0.1 * this.linesPerPage) * this.lineHeight;
 
     this.pageObserverStart = new PageSwapObserver(
       this.root,
       "observe-start",
+      `${rootMarginBase * 2}px`,
       (isIntersecting) => {
         if (isIntersecting) {
           const shouldSwap = this.pages[0].pageIndexOffset !== 0;
           if (shouldSwap) {
-            console.log("inteserct start, will swap");
             const currentScroll = window.scrollY;
             this.pageObserverStart.unmount();
             this.pageObserverEnd.unmount();
@@ -177,14 +170,13 @@ class DoubleSwapPagination {
 
             this.pages[0].mountOnStart();
 
-            setTimeout(() => {
-              window.scrollTo({
-                behavior: "instant",
-                top: currentScroll + this.linesPerPage * this.lineHeight
-              });
-              this.pageObserverStart.mount();
-              this.pageObserverEnd.mount();
+            window.scrollTo({
+              behavior: "instant",
+              top: currentScroll + this.linesPerPage * this.lineHeight,
             });
+
+            this.pageObserverStart.mount();
+            this.pageObserverEnd.mount();
           }
         }
       },
@@ -192,13 +184,13 @@ class DoubleSwapPagination {
     this.pageObserverEnd = new PageSwapObserver(
       this.root,
       "observe-end",
+      `${rootMarginBase}px`,
       (isIntersecting) => {
         if (
           isIntersecting &&
           this.pages[1].pageIndexOffset + this.linesPerPage <
             this.totalAmountOfLines
         ) {
-          console.log("intersect end, will swap", isIntersecting);
           this.pageObserverStart.unmount();
           this.pageObserverEnd.unmount();
 
@@ -208,10 +200,8 @@ class DoubleSwapPagination {
           this.adjustPagesToFitLines();
           this.pages[1].mountOnEnd();
 
-          setTimeout(() => {
-            this.pageObserverStart.mount();
-            this.pageObserverEnd.mount();
-          });
+          this.pageObserverStart.mount();
+          this.pageObserverEnd.mount();
         }
       },
     );
@@ -221,10 +211,16 @@ class DoubleSwapPagination {
   }
 
   mountVisibleItems() {
-    this.pages.forEach((page) => page.mountChildren());
+    this.pages.forEach((page) => page.mountVisibleItems());
   }
 
-  adjustPagesToFitLines(amountOfLines: number = this.totalAmountOfLines) {
+  updateTotalAmountOfLines(newTotalAmountOfLines: number) {
+    this.adjustPagesToFitLines(newTotalAmountOfLines);
+  }
+
+  private adjustPagesToFitLines(
+    amountOfLines: number = this.totalAmountOfLines,
+  ) {
     this.totalAmountOfLines = amountOfLines;
 
     if (amountOfLines < this.linesPerPage) {
@@ -241,16 +237,6 @@ class DoubleSwapPagination {
         this.pages[1].updateLines(this.linesPerPage);
       }
     }
-    // const lastPage = this.pages[this.pages.length - 1];
-    // const currentTotalAmountOfLines = this.pages.length * this.linesPerPage;
-    // const extraLines = currentTotalAmountOfLines - amountOfLines;
-    // const expectedLastPageSize = Math.min(
-    //   this.linesPerPage,
-    //   this.linesPerPage - extraLines,
-    // );
-    // if (expectedLastPageSize > 0) {
-    //   lastPage.updateLines(expectedLastPageSize);
-    // }
   }
 }
 
@@ -259,7 +245,6 @@ export class JsonRenderer {
   private json: Record<string, any>;
   private root: HTMLElement;
   private lines: Line[] = [];
-  private lineCount = 0;
   private renderedLines: Array<HTMLElement | null> = [];
   private lineHeight = 0;
   private lineGenerator: Generator<Line>;
@@ -269,7 +254,7 @@ export class JsonRenderer {
   private loadedLinesCount = 0;
   private loadLinesInterval = 0;
   private pagination: DoubleSwapPagination;
-  private linesPerPage = 50;
+  private linesPerPage = 1000;
 
   constructor(json: Record<string, any>, root: HTMLElement) {
     this.json = json;
@@ -297,12 +282,10 @@ export class JsonRenderer {
 
   private loadLines(amount: number = this.linesPerLoad) {
     const isDone = this.loadNextLines(amount);
+    this.pagination.updateTotalAmountOfLines(this.lines.length);
 
     if (isDone) {
-      console.log("Finished loading lines");
-      console.log(this.lineCount, this.lines.length);
       console.timeEnd("load all lines");
-      this.pagination.adjustPagesToFitLines(this.lines.length);
       this.pagination.mountVisibleItems();
       return;
     }
@@ -344,6 +327,7 @@ export class JsonRenderer {
     // console.log('mount', line, globalIndex, localIndex);
 
     if (!line) {
+      console.log(`line ${globalIndex} is not ready`);
       return false;
     }
 
