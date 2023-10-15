@@ -20,7 +20,6 @@ export class JsonRenderer {
   private lineGenerator: Generator<Line>;
   private linesOnInitialLoad = 50;
   private linesPerLoad = 20000;
-  private loadLinesTimeoutId = -1;
   private loadedLinesCount = 0;
   private loadLinesInterval = 0;
   private pagination: DoubleSwapPagination;
@@ -60,7 +59,7 @@ export class JsonRenderer {
       return;
     }
 
-    this.loadLinesTimeoutId = setTimeout(() => {
+    setTimeout(() => {
       this.loadLines(this.linesPerLoad);
     }, this.loadLinesInterval);
   }

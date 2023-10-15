@@ -71,6 +71,8 @@ class PageSwapObserver {
     private onIntersect: (isIntersecting: boolean) => void,
   ) {
     this.element = document.createElement("div");
+    this.element.style.height = "1px";
+    this.element.style.width = "1px";
     this.observer = new IntersectionObserver(
       (entries) => {
         this.onIntersect(entries[0].isIntersecting);
@@ -181,6 +183,7 @@ export class DoubleSwapPagination {
           this.pages[1].pageIndexOffset + this.linesPerPage <
             this.totalAmountOfLines
         ) {
+          const currentScroll = window.scrollY;
           this.pageObserverStart.unmount();
           this.pageObserverEnd.unmount();
 
@@ -189,6 +192,11 @@ export class DoubleSwapPagination {
             this.pages[0].pageIndexOffset + this.linesPerPage;
           this.adjustPagesToFitLines();
           this.pages[1].mountOnEnd();
+
+          window.scrollTo({
+            behavior: "instant",
+            top: currentScroll - this.linesPerPage * this.lineHeight,
+          });
 
           this.pageObserverStart.mount();
           this.pageObserverEnd.mount();

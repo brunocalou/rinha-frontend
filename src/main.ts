@@ -11,7 +11,6 @@ const jsonErrorText = document.getElementById("load-json-error")!;
 const jsonPage = document.getElementById("json-page")!;
 const jsonNameText = document.getElementById("json-name")!;
 const jsonTarget = document.getElementById("json")!;
-let jsonRenderer: JsonRenderer | null = null;
 
 function init() {
   loadJsonInput.addEventListener("change", async (event: Event) => {
@@ -26,7 +25,7 @@ function init() {
         jsonPage.classList.remove("hidden");
         jsonPage.classList.add("flex");
 
-        jsonRenderer = new JsonRenderer(json, jsonTarget);
+        new JsonRenderer(json, jsonTarget);
       } catch (error) {
         console.error(error);
         jsonErrorText.classList.remove("hidden");
