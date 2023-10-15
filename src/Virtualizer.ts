@@ -68,7 +68,6 @@ export class Virtualizer {
       }
 
       if (this.mountedIndexes[i] !== null) {
-        // console.log("unmount", i, this.mountedIndexes[i]);
         if (this.onUnmount(i)) {
           this.mountedIndexes[i] = false;
         }
@@ -77,7 +76,6 @@ export class Virtualizer {
 
     for (let i = newVisibleRange[0]; i < newVisibleRange[1]; i += 1) {
       if (!this.mountedIndexes[i]) {
-        // console.log("mount", i, this.mountedIndexes[i]);
         if (this.onMount(i)) {
           this.mountedIndexes[i] = true;
         }
