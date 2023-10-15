@@ -10,43 +10,121 @@ type Line = {
   type: "array-start" | "array-end" | "object-start" | "property";
 };
 
-class Page {
+class PageSwapObserver {
   element: HTMLElement;
-  virtualizer: Virtualizer;
-
-  constructor(
-    private itemHeight: number,
-    private lines: number,
-    private onMount: (page: Page, index: number) => boolean,
-    private onUnmount: (page: Page, index: number) => boolean,
-  ) {
-    this.element = document.createElement("div");
-    this.element.classList.add("relative");
-    this.virtualizer = new Virtualizer(
-      this.element,
-      this.itemHeight,
-      this.lines,
-      (index) => {
-        return this.onMount(this, index);
-      },
-      (index) => {
-        return this.onUnmount(this, index);
-      },
-    );
-  }
-
-  updateLines(newLines: number) {
-    this.lines = newLines;
-    this.virtualizer.updateListSize(newLines);
-  }
-}
-
-class Pagination {
-  private pages: Page[] = [];
+  observer: IntersectionObserver;
 
   constructor(
     private root: HTMLElement,
-    private itemHeight: number,
+    public role: "observe-start" | "observe-end",
+    private onIntersect: (isIntersecting: boolean) => void,
+  ) {
+    this.element = document.createElement("div");
+    this.observer = new IntersectionObserver((entries) => {
+      this.onIntersect(entries[0].isIntersecting);
+    });
+
+    this.observer.observe(this.element);
+  }
+
+  unmount() {
+    this.root.removeChild(this.element);
+  }
+
+  mount() {
+    if (this.role === "observe-start") {
+      this.mountOnStart();
+    } else {
+      this.mountOnEnd();
+    }
+  }
+
+  private mountOnStart() {
+    this.root.prepend(this.element);
+  }
+
+  private mountOnEnd() {
+    this.root.appendChild(this.element);
+  }
+}
+
+class Page {
+  element: HTMLElement;
+  // virtualizer: Virtualizer;
+
+  constructor(
+    private root: HTMLElement,
+    private lineHeight: number,
+    private lines: number,
+    public pageIndexOffset: number,
+    private onMount: (
+      page: Page,
+      globalIndex: number,
+      localIndex: number,
+    ) => boolean,
+    private onUnmount: (
+      page: Page,
+      globalIndex: number,
+      localIndex: number,
+    ) => boolean,
+  ) {
+    this.element = document.createElement("div");
+    this.element.style.position = "relative";
+    this.element.style.minHeight = `${this.lineHeight * this.lines}px`;
+    // this.virtualizer = new Virtualizer(
+    //   this.element,
+    //   this.lineHeight,
+    //   this.lines,
+    //   (index) => {
+    //     return this.onMount(this, this.pageIndexOffset + index, index);
+    //   },
+    //   (index) => {
+    //     return this.onUnmount(this, this.pageIndexOffset + index, index);
+    //   },
+    // );
+  }
+
+  mountChildren() {
+    console.log("mount children", this.pageIndexOffset, this.lines);
+    for (let i = 0; i < this.lines; i += 1) {
+      this.onMount(this, this.pageIndexOffset + i, i);
+    }
+  }
+
+  updateLines(newLines: number) {
+    console.log("adjust lines to", newLines);
+    this.lines = newLines;
+    this.element.style.minHeight = `${this.lineHeight * this.lines}px`;
+    // this.virtualizer.updateListSize(newLines);
+  }
+
+  mountOnStart() {
+    this.element.textContent = "";
+    this.mountChildren();
+    this.root.prepend(this.element);
+    // this.virtualizer.reset();
+    // this.virtualizer.mountVisibleItems();
+  }
+
+  mountOnEnd() {
+    this.element.textContent = "";
+    this.mountChildren();
+    this.root.appendChild(this.element);
+    // this.virtualizer.reset();
+    // this.virtualizer.mountVisibleItems();
+  }
+}
+
+class DoubleSwapPagination {
+  private pages: Page[] = [];
+  private pageObserverStart: PageSwapObserver;
+  private pageObserverEnd: PageSwapObserver;
+  private totalAmountOfLines = 0;
+  // private activePage: Page;
+
+  constructor(
+    private root: HTMLElement,
+    private lineHeight: number,
     private linesPerPage: number,
     private onMount: (
       page: Page,
@@ -58,50 +136,121 @@ class Pagination {
       globalIndex: number,
       localIndex: number,
     ) => boolean,
-  ) {}
+  ) {
+    this.totalAmountOfLines = linesPerPage * 2;
 
-  createPagesToFitLines(amountOfLines: number) {
-    const amountOfPages = Math.floor(amountOfLines / this.linesPerPage) + 1;
-
-    if (this.pages.length < amountOfPages) {
-      for (let i = this.pages.length; i < amountOfPages; i += 1) {
-        const page = new Page(
-          this.itemHeight,
-          this.linesPerPage,
-          (pageInstance, pageLineIndex) => {
-            return this.onMount(
-              pageInstance,
-              pageLineIndex + i * this.linesPerPage,
-              pageLineIndex,
-            );
-          },
-          (pageInstance, pageLineIndex) => {
-            return this.onUnmount(
-              pageInstance,
-              pageLineIndex + i * this.linesPerPage,
-              pageLineIndex,
-            );
-          },
-        );
-        this.pages.push(page);
-        /**
-         * TODO: 
-         * - Use just 2 pages at any time (double buffer swap technique)
-         * - Swap their positions on root according to the scroll
-         * - Disable virtualizer when the page is out of view
-         **/
-        this.root.appendChild(page.element);
-        page.virtualizer.mountVisibleItems();
-      }
+    for (let i = 0; i < 2; i += 1) {
+      const page = new Page(
+        this.root,
+        this.lineHeight,
+        this.linesPerPage,
+        i * this.linesPerPage,
+        this.onMount,
+        this.onUnmount,
+      );
+      this.pages.push(page);
+      /**
+       * TODO:
+       * - Use just 2 pages at any time (double buffer swap technique)
+       * - Swap their positions on root according to the scroll
+       * - Disable virtualizer when the page is out of view
+       **/
+      page.mountOnEnd();
     }
+
+    this.pageObserverStart = new PageSwapObserver(
+      this.root,
+      "observe-start",
+      (isIntersecting) => {
+        if (isIntersecting) {
+          const shouldSwap = this.pages[0].pageIndexOffset !== 0;
+          if (shouldSwap) {
+            console.log("inteserct start, will swap");
+            const currentScroll = window.scrollY;
+            this.pageObserverStart.unmount();
+            this.pageObserverEnd.unmount();
+
+            this.pages.reverse();
+            this.pages[0].pageIndexOffset =
+              this.pages[1].pageIndexOffset - this.linesPerPage;
+            this.adjustPagesToFitLines();
+
+            this.pages[0].mountOnStart();
+
+            setTimeout(() => {
+              window.scrollTo({
+                behavior: "instant",
+                top: currentScroll + this.linesPerPage * this.lineHeight
+              });
+              this.pageObserverStart.mount();
+              this.pageObserverEnd.mount();
+            });
+          }
+        }
+      },
+    );
+    this.pageObserverEnd = new PageSwapObserver(
+      this.root,
+      "observe-end",
+      (isIntersecting) => {
+        if (
+          isIntersecting &&
+          this.pages[1].pageIndexOffset + this.linesPerPage <
+            this.totalAmountOfLines
+        ) {
+          console.log("intersect end, will swap", isIntersecting);
+          this.pageObserverStart.unmount();
+          this.pageObserverEnd.unmount();
+
+          this.pages.reverse();
+          this.pages[1].pageIndexOffset =
+            this.pages[0].pageIndexOffset + this.linesPerPage;
+          this.adjustPagesToFitLines();
+          this.pages[1].mountOnEnd();
+
+          setTimeout(() => {
+            this.pageObserverStart.mount();
+            this.pageObserverEnd.mount();
+          });
+        }
+      },
+    );
+
+    this.pageObserverStart.mount();
+    this.pageObserverEnd.mount();
   }
 
-  adjustLastPageToFitLines(amountOfLines: number) {
-    const lastPage = this.pages[this.pages.length - 1];
-    const currentTotalAmountOfLines = this.pages.length * this.linesPerPage;
-    const extraLines = currentTotalAmountOfLines - amountOfLines;
-    const expectedLastPageSize = this.linesPerPage - extraLines;
-    lastPage.updateLines(expectedLastPageSize);
+  mountVisibleItems() {
+    this.pages.forEach((page) => page.mountChildren());
+  }
+
+  adjustPagesToFitLines(amountOfLines: number = this.totalAmountOfLines) {
+    this.totalAmountOfLines = amountOfLines;
+
+    if (amountOfLines < this.linesPerPage) {
+      this.pages[0].updateLines(amountOfLines);
+      this.pages[1].updateLines(0);
+    } else {
+      this.pages[0].updateLines(this.linesPerPage);
+
+      if (this.pages[1].pageIndexOffset > amountOfLines - this.linesPerPage) {
+        this.pages[1].updateLines(
+          amountOfLines - this.pages[1].pageIndexOffset,
+        );
+      } else {
+        this.pages[1].updateLines(this.linesPerPage);
+      }
+    }
+    // const lastPage = this.pages[this.pages.length - 1];
+    // const currentTotalAmountOfLines = this.pages.length * this.linesPerPage;
+    // const extraLines = currentTotalAmountOfLines - amountOfLines;
+    // const expectedLastPageSize = Math.min(
+    //   this.linesPerPage,
+    //   this.linesPerPage - extraLines,
+    // );
+    // if (expectedLastPageSize > 0) {
+    //   lastPage.updateLines(expectedLastPageSize);
+    // }
   }
 }
 
@@ -119,22 +268,13 @@ export class JsonRenderer {
   private loadLinesTimeoutId = -1;
   private loadedLinesCount = 0;
   private loadLinesInterval = 0;
-  private pagination: Pagination;
-  private linesPerPage = 1e4;
+  private pagination: DoubleSwapPagination;
+  private linesPerPage = 50;
 
   constructor(json: Record<string, any>, root: HTMLElement) {
     this.json = json;
     this.root = root;
     this.lineHeight = +getComputedStyle(root).lineHeight.replace("px", "");
-
-    this.pagination = new Pagination(
-      this.root,
-      this.lineHeight,
-      this.linesPerPage,
-      this.mount.bind(this),
-      this.unmount.bind(this),
-    );
-
     this.lineGenerator = JsonRenderer.getLineGenerator(
       this.json,
       0,
@@ -142,18 +282,28 @@ export class JsonRenderer {
     );
 
     console.time("load all lines");
-    this.loadLines(this.linesOnInitialLoad);
+    this.loadNextLines(this.linesOnInitialLoad);
+
+    this.pagination = new DoubleSwapPagination(
+      this.root,
+      this.lineHeight,
+      this.linesPerPage,
+      this.mount.bind(this),
+      this.unmount.bind(this),
+    );
+
+    this.loadLines();
   }
 
-  private loadLines(amount: number) {
+  private loadLines(amount: number = this.linesPerLoad) {
     const isDone = this.loadNextLines(amount);
-    this.pagination.createPagesToFitLines(this.lines.length);
 
     if (isDone) {
       console.log("Finished loading lines");
       console.log(this.lineCount, this.lines.length);
       console.timeEnd("load all lines");
-      this.pagination.adjustLastPageToFitLines(this.lines.length);
+      this.pagination.adjustPagesToFitLines(this.lines.length);
+      this.pagination.mountVisibleItems();
       return;
     }
 
@@ -191,13 +341,19 @@ export class JsonRenderer {
     const line = this.lines[globalIndex];
     let element = this.renderedLines[globalIndex];
 
+    // console.log('mount', line, globalIndex, localIndex);
+
     if (!line) {
       return false;
     }
 
+    const top = localIndex * this.lineHeight;
+
     if (!element) {
-      element = JsonRenderer.renderLine(line, localIndex * this.lineHeight);
+      element = JsonRenderer.renderLine(line, top);
       this.renderedLines[globalIndex] = element;
+    } else {
+      element.style.top = `${top}px`;
     }
 
     pageInstance.element.appendChild(element);

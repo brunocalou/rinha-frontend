@@ -14,6 +14,10 @@ export class Virtualizer {
     this.addListeners();
   }
 
+  reset() {
+    this.updateListSize(this.listSize);
+  }
+
   updateListSize(newListSize: number) {
     this.listSize = newListSize;
     this.root.style.position = "relative";
