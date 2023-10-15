@@ -1,7 +1,7 @@
 export class Virtualizer {
   private visibleRange = [0, 0];
   private mountedIndexes: boolean[] = [];
-  private extraRangeInPx = 100;
+  private extraRangeInPx = 300;
 
   constructor(
     private root: HTMLElement,
@@ -62,25 +62,22 @@ export class Virtualizer {
   private handleScroll() {
     const newVisibleRange = this.calcVisibleRange();
 
-    for (let i = this.visibleRange[0]; i < this.visibleRange[1]; i += 1) {
-      if (i >= newVisibleRange[0] && i <= newVisibleRange[1]) {
-        continue;
-      }
-
-      if (this.mountedIndexes[i] !== null) {
-        if (this.onUnmount(i)) {
-          this.mountedIndexes[i] = false;
+    for (let i = 0; i < this.mountedIndexes.length; i += 1) {
+      if (i >= newVisibleRange[0] && i < newVisibleRange[1]) {
+        if (!this.mountedIndexes[i]) {
+          if (this.onMount(i)) {
+            this.mountedIndexes[i] = true;
+          }
+        }
+      } else {
+        if (this.mountedIndexes[i]) {
+          if (this.onUnmount(i)) {
+            this.mountedIndexes[i] = false;
+          }
         }
       }
     }
 
-    for (let i = newVisibleRange[0]; i < newVisibleRange[1]; i += 1) {
-      if (!this.mountedIndexes[i]) {
-        if (this.onMount(i)) {
-          this.mountedIndexes[i] = true;
-        }
-      }
-    }
     this.visibleRange = newVisibleRange;
   }
 
